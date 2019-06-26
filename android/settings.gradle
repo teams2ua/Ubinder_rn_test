@@ -1,0 +1,6 @@
+rootProject.name = 'Test'
+
+include ':react-native-ledger-core'
+project(':react-native-ledger-core').projectDir = new File(rootProject.projectDir, '../node_modules/@ledgerhq/react-native-ledger-core/android')
+
+include ':app'
