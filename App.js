@@ -7,63 +7,87 @@
  */
 
 import React, {Component} from 'react';
-import {Platform, StyleSheet, Text, View, NativeModules, RCTUbinder} from 'react-native';
-import { DeviceEventEmitter } from 'react-native';
-import {GetVersionResponse, CoreRequestType, CoreRequest} from './messages/commands_pb.js'
+import {Platform, StyleSheet, Text, View, NativeModules} from 'react-native';
+import lib_core_logic from './create_sync_balance.js';
+import UbinderOnPromises from './UbinderOnPromises.js';
+import RawRNUbinder from './RawRNUbinder.js';
+import axios from "axios";
+import { thisExpression } from '@babel/types';
 
+const services = require('./messages/services_pb.js')
 
 export default class App extends Component {
 
-  DoTheJob() {
-    var x = this.createGetVersionRequest();
-    console.log(x);
-    var l = NativeModules.Ubinder.SendRequest("12323", "321412");
-    console.log(l);
-  }
-
   constructor(props) {
     super(props);
-    console.log(NativeModules);
-    console.log(NativeModules.Ubinder);
+    this.RawRNUbinder = new RawRNUbinder();
+    this.ubinder = new UbinderOnPromises.UbinderOnPromises(this.RawRNUbinder, this.OnNotification, this.OnRequest);
     this.DoTheJob();
+    this.state={
+      logg:""
+    }
+  }
+
+  updateLog= (x) => {
+    this.setState({logg:this.state.logg + x + '\n\r'})
+  }
+
+  DoTheJob(){
+    lib_core_logic.run_test_logic(this.ubinder, this.updateLog, "/data/data/com.test/files");
+  };
+
+  OnRequest(data, callback) {
+    var serviceReq = services.ServiceRequest.deserializeBinary(data);
+    if (serviceReq.getType() == services.ServiceRequestType.HTTP_REQ) {
+        var httpReq = services.HttpRequest.deserializeBinary(serviceReq.getRequestBody());
+        const method = httpReq.getMethod();
+        const headersMap = httpReq.getHeadersMap();
+        let dataStr = httpReq.getBody();
+        const headers = {};
+        headersMap.forEach((v, k) => {
+            headers[k] = v;
+        });
+        let res;
+        const param = {
+            method,
+            headers
+        };
+        param.url = httpReq.getUrl();
+        if (dataStr != "") {
+            param.data = dataStr;
+        }
+        console.log(param);
+        axios(param)
+          .then((resp) => {
+              var serviceResp = new services.ServiceResponse();
+              var respMessage = new services.HttpResponse();
+              respMessage.setCode(resp.status);
+              respMessage.setBody(JSON.stringify(resp.data));
+              serviceResp.setResponseBody(respMessage.serializeBinary());
+              callback(serviceResp.serializeBinary());
+              })
+          .catch((err) => {
+              console.log(err);
+              var serviceResp = new services.ServiceResponse();
+              serviceResp.setError(err.message);
+              callback(serviceResp.serializeBinary());
+          });
+    }
+  }
+
+  OnNotification(data) {
+    console.log("I am inside component OnNotification");
   }
 
   render() {
     return (
-      <Text>"Read console"</Text>
+      <Text>{this.state.logg}</Text>
     );
   }
 
-  createGetVersionRequest() {
-    var req = new CoreRequest();
-    req.setRequestType(CoreRequestType.GET_VERSION);
-    return req;
-  }
-    
-
-
-  componentDidMount() {
-    this.onRequestSub = DeviceEventEmitter.addListener('onRequest', function(e: Event) {
-        console.log("OnRequest");
-        console.log(e);
-    });
-
-    this.onResponseSub = DeviceEventEmitter.addListener('onResponse', function(e: Event) {
-        console.log("OnResponse");
-        console.log(e);
-    });
-
-    this.onNotificationSub = DeviceEventEmitter.addListener('onNotification', function(e: Event) {
-        console.log("OnNotification");
-        console.log(e);
-    });
-
-  }
 
   componentWillUnmount() {
-    this.onRequestSub.remove();
-    this.onResponseSub.remove();
-    this.onNotificationSub.remove();
+    this.RawRNUbinder.unmount();
   }
 
 }
