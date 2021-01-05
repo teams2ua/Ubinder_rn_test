@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@ledgerhq/react-native-ledger-core": "^0.6.0-beta.5",
-    "axios": "^0.19.0",
+    "axios": "^0.21.1",
     "buffer": "^5.2.1",
     "google-protobuf": "^3.7.1",
     "npm": "^6.13.4",
